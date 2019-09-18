@@ -291,15 +291,67 @@ class CRM_Banking_Matcher_Engine {
   /**
    * Bulk-run a set of <n> unprocessed items
    *
-   * @param $max_count       the maximal amount of bank transactions to process
+   * @param $max_count            the maximal amount of bank transactions to process
+   * @param $max_execution_time   the maximum execution time this task shall run
+   * @param $starting_time        start timestamp of the job
    *
-   * @return the actual amount of bank transactions prcoessed
+   * @return int                  the actual amount of bank transactions processed
    */
-  public function bulkRun($max_count) {
-    $unprocessed_ids = CRM_Banking_BAO_BankTransaction::findUnprocessedIDs($max_count);
+  public function bulkRun($max_count, $starting_time, $max_execution_time = NULL) {
+    $php_max_execution_time = ini_get("max_execution_time");
+    if (!isset($max_execution_time) || $max_execution_time > $php_max_execution_time) {
+        // use php max execution time - 5% to have some safe guard for the rerst of the execution
+        $max_execution_time = $php_max_execution_time - (int) ($php_max_execution_time/20);
+    }
+    if (empty($max_count)) {
+        return $this->bulk_run_for_time($max_execution_time, $starting_time);
+    }
+
+    return $this->bulk_run_counter($max_count, $max_execution_time, $starting_time);
+  }
+
+
+  /**
+   * @param $max_execution_time
+   * @param $starting_time
+   * @param int $badge_limit
+   *
+   * @return int
+   */
+  private function bulk_run_for_time($max_execution_time, $starting_time, $badge_limit = 100) {
+    $counter = 0;
+    while (TRUE) {
+      $unprocessed_ids = CRM_Banking_BAO_BankTransaction::findUnprocessedIDs($badge_limit);
+      foreach ($unprocessed_ids as $unprocessed_id) {
+        $this->match($unprocessed_id);
+        $counter += 1;
+        $now = strtotime('now');
+        if ($now - $starting_time >= $max_execution_time) {
+          return $counter;
+        }
+      }
+    }
+  }
+
+
+  /**
+   * @param $max_counter
+   * @param $threshold_time
+   * @param $starting_time
+   *
+   * @return int
+   */
+  private function bulk_run_counter($max_counter, $threshold_time, $starting_time) {
+    $counter = 0;
+    $unprocessed_ids = CRM_Banking_BAO_BankTransaction::findUnprocessedIDs($max_counter);
     foreach ($unprocessed_ids as $unprocessed_id) {
       $this->match($unprocessed_id);
+      $counter += 1;
+      $now = strtotime('now');
+      if ($now - $starting_time >= $threshold_time) {
+        return $counter;
+      }
     }
-    return count($unprocessed_ids);
+    return $counter;
   }
 }

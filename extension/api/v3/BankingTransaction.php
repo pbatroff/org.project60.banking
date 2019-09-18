@@ -243,6 +243,9 @@ function _civicrm_api3_banking_transaction_analyselist_spec(&$spec) {
  *           time: a range <from_time>-<to_time> (24h) where this should apply (for scheduled job execution)
  *                    example: 23:00-04:00
  *           count: a limit for the amount of bank transactions to be processed - to avoid timeouts
+ *           maxruntime: maximum runtime in seconds for the job. If this is given, the job will continue
+ *                    to proocess transactions until the runtime is reached.
+ *                    In case both runtime and count is provided, the task will stop when either condition is reached.
  *
  * @return  array api result array
  * @access public
@@ -274,14 +277,26 @@ function civicrm_api3_banking_transaction_analyseoldest($params) {
   }
 
   // extract max_count parameter
-  $max_count = 1000;
   if (!empty($params['count']) && ((int) $params['count']) > 0) {
     $max_count = (int) $params['count'];
   }
 
+  $max_execution_time = NULL;
+  if(!empty($params['maxruntime']) && ((int) $params['maxruntime']) > 0) {
+      $max_execution_time = (int) $params['maxruntime'];
+  }
+
   // then execute
   $engine = CRM_Banking_Matcher_Engine::getInstance();
-  $processed_count = $engine->bulkRun($max_count);
+
+  if (isset($max_execution_time) && !isset($max_count)) {
+      $processed_count = $engine->bulkRun(NULL, $now, $max_execution_time);
+  } else {
+      if(empty($max_count)) {
+          $max_count = 1000;
+      }
+      $processed_count = $engine->bulkRun($max_count, $now, $max_execution_time);
+  }
 
   // finally, compile the result
   $after_exec = strtotime('now');
