@@ -299,9 +299,16 @@ class CRM_Banking_Matcher_Engine {
    */
   public function bulkRun($max_count, $starting_time, $max_execution_time = NULL) {
     $php_max_execution_time = ini_get("max_execution_time");
-    if (!isset($max_execution_time) || $max_execution_time > $php_max_execution_time) {
-        // use php max execution time - 5% to have some safe guard for the rerst of the execution
+    if (!isset($max_execution_time) || ($max_execution_time > $php_max_execution_time) && $php_max_execution_time != 0) {
+        // use php max execution time - 5% to have some safe guard for the rest of the execution
         $max_execution_time = $php_max_execution_time - (int) ($php_max_execution_time/20);
+    }
+    if (empty($max_execution_time)) {
+      // we don't have a $max_execution_time, and could not read out the configured php_max_execution time
+      // or max_execution_time is 0 (php-cli)
+      // we set $max_execution time to 10000 seconds, to either achieve max_count
+      // and have a generous max_execution_time
+      $max_execution_time = 10000;
     }
     if (empty($max_count)) {
         return $this->bulk_run_for_time($max_execution_time, $starting_time);
